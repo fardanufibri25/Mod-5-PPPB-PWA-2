@@ -1,4 +1,4 @@
-import { apiClient, IS_SUPABASE } from '../config/api'
+import { apiClient, apiClientRaw, IS_SUPABASE } from '../config/api'
 
 // ---------------------------------------------------------------------------
 // Normalizer — standardizes product shape whether received from Supabase
@@ -62,50 +62,48 @@ export const normalizeProduct = (item) => {
 class GunService {
   /**
    * Fetch a paginated, filterable list of products.
+   * Supabase: server-side pagination via `limit` + `offset`, total from
+   * `Content-Range` (requested with `Prefer: count=exact`).
+   *
+   * @param {Object} params { search, category, sort_by, order, page, limit }
    */
   async getGuns(params = {}) {
+    const { search, category, sort_by, order, page = 1, limit = 9 } = params
+    const offset = (page - 1) * limit
+
     if (IS_SUPABASE) {
-      const queryParts = ['select=*']
+      const query = new URLSearchParams()
+      query.set('select', '*')
+      if (search) query.set('name', `ilike.*${search}*`)
+      if (category && category !== 'All') query.set('type', `eq.${category}`)
+      query.set('order', `${sort_by || 'created_at'}.${order === 'desc' ? 'desc' : 'asc'}`)
+      query.set('limit', String(limit))
+      query.set('offset', String(offset))
 
-      if (params.search) {
-        queryParts.push(`name=ilike.*${encodeURIComponent(params.search)}*`)
-      }
-
-      if (params.category && params.category !== 'All') {
-        queryParts.push(`type=eq.${encodeURIComponent(params.category)}`)
-      }
-
-      if (params.sort_by) {
-        const order = params.order === 'desc' ? 'desc' : 'asc'
-        queryParts.push(`order=${encodeURIComponent(params.sort_by)}.${order}`)
-      } else {
-        queryParts.push('order=created_at.desc')
-      }
-
-      if (params.limit) {
-        queryParts.push(`limit=${params.limit}`)
-      }
-
-      const queryString = queryParts.join('&')
-      const data = await apiClient.get(`/rest/v1/products?${queryString}`)
-      const list = Array.isArray(data) ? data.map(normalizeProduct) : []
+      const res = await apiClientRaw.get(`/rest/v1/products?${query}`, {
+        headers: { Prefer: 'count=exact' },
+      })
+      const list = Array.isArray(res.data) ? res.data.map(normalizeProduct) : []
+      const range = res.headers['content-range'] || ''
+      const total = Number(range.split('/')[1]) || list.length
 
       return {
         success: true,
         data: list,
-        pagination: {
-          total: list.length,
-          page: params.page || 1,
-          limit: params.limit || 50,
-        },
+        pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
       }
     }
 
     // Fallback: university REST API
-    const clean = Object.fromEntries(
-      Object.entries(params).filter(([, v]) => v !== '' && v != null),
-    )
-    return apiClient.get('/api/v1/recipes', { params: clean })
+    const res = await apiClientRaw.get('/api/v1/recipes', {
+      params: { ...params, offset, limit },
+    })
+    const list = Array.isArray(res.data) ? res.data.map(normalizeProduct) : []
+    return {
+      success: true,
+      data: list,
+      pagination: { total: list.length, page, limit, totalPages: 1 },
+    }
   }
 
   /**
@@ -119,7 +117,8 @@ class GunService {
       }
       throw new Error('Hardware item not found.')
     }
-    return apiClient.get(`/api/v1/recipes/${id}`)
+    const res = await apiClientRaw.get(`/api/v1/recipes/${id}`)
+    return { success: true, data: normalizeProduct(res.data) }
   }
 
   /**
@@ -149,7 +148,8 @@ class GunService {
       const created = Array.isArray(res) ? res[0] : res
       return { success: true, data: normalizeProduct(created) }
     }
-    return apiClient.post('/api/v1/recipes', data)
+    const res = await apiClientRaw.post('/api/v1/recipes', data)
+    return { success: true, data: normalizeProduct(res.data) }
   }
 
   /**
@@ -182,7 +182,8 @@ class GunService {
       const updated = Array.isArray(res) ? res[0] : res
       return { success: true, data: normalizeProduct(updated) }
     }
-    return apiClient.put(`/api/v1/recipes/${id}`, data)
+    const res = await apiClientRaw.put(`/api/v1/recipes/${id}`, data)
+    return { success: true, data: normalizeProduct(res.data) }
   }
 
   /**
@@ -192,7 +193,8 @@ class GunService {
     if (IS_SUPABASE) {
       return this.updateGun(id, data)
     }
-    return apiClient.patch(`/api/v1/recipes/${id}`, data)
+    const res = await apiClientRaw.patch(`/api/v1/recipes/${id}`, data)
+    return { success: true, data: normalizeProduct(res.data) }
   }
 
   /**
@@ -203,7 +205,8 @@ class GunService {
       await apiClient.delete(`/rest/v1/products?id=eq.${id}`)
       return { success: true }
     }
-    return apiClient.delete(`/api/v1/recipes/${id}`)
+    await apiClientRaw.delete(`/api/v1/recipes/${id}`)
+    return { success: true }
   }
 }
 

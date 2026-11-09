@@ -26,6 +26,34 @@ const writeLocalFavs = (ids) => {
   }
 }
 
+// One shared request/cache for every FavoriteButton on the page.
+// Without this each card fires its own /favorites request (9 cards = 9 calls).
+// shortcut: single browser user; key by userIdentifier if multi-user matters.
+let favCache = null
+let favPromise = null
+
+const loadFavorites = (userIdentifier, force = false) => {
+  if (!force && favCache) return Promise.resolve(favCache)
+  if (!force && favPromise) return favPromise
+
+  favPromise = favoriteService
+    .getFavorites(userIdentifier)
+    .then((response) => {
+      if (!response.success) throw new Error(response.message)
+      favCache = { data: response.data || [], isLocal: false }
+      return favCache
+    })
+    .catch(() => {
+      favCache = { data: readLocalFavs(), isLocal: true }
+      return favCache
+    })
+    .finally(() => {
+      favPromise = null
+    })
+
+  return favPromise
+}
+
 // ---------------------------------------------------------------------------
 // useFavorites — list all favourited product IDs.
 //
@@ -39,33 +67,40 @@ export function useFavorites() {
   const [isLocal, setIsLocal] = useState(false)
   const userIdentifier = getUserIdentifier()
 
-  const fetchFavorites = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
+  const fetchFavorites = useCallback(
+    async (force = false) => {
+      try {
+        setLoading(true)
+        setError(null)
 
-      const response = await favoriteService.getFavorites(userIdentifier)
-
-      if (response.success) {
-        setFavorites(response.data || [])
-        setIsLocal(false)
-      } else {
-        throw new Error(response.message)
+        const { data, isLocal: local } = await loadFavorites(
+          userIdentifier,
+          force,
+        )
+        setFavorites(data)
+        setIsLocal(local)
+      } catch (err) {
+        setError(err)
+        setFavorites(readLocalFavs())
+        setIsLocal(true)
+      } finally {
+        setLoading(false)
       }
-    } catch {
-      // Fallback to localStorage
-      setFavorites(readLocalFavs())
-      setIsLocal(true)
-    } finally {
-      setLoading(false)
-    }
-  }, [userIdentifier])
+    },
+    [userIdentifier],
+  )
 
   useEffect(() => {
     fetchFavorites()
   }, [fetchFavorites])
 
-  return { favorites, loading, error, isLocal, refetch: fetchFavorites }
+  return {
+    favorites,
+    loading,
+    error,
+    isLocal,
+    refetch: () => fetchFavorites(true),
+  }
 }
 
 // ---------------------------------------------------------------------------

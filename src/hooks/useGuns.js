@@ -2,89 +2,81 @@ import { useState, useEffect, useCallback } from 'react'
 import gunService from '../services/gunService'
 
 // ---------------------------------------------------------------------------
-// useGuns — fetch the paginated / filtered product list from the API.
+// Query cache — in-memory Map with a 60s TTL.
 //
-// Returns { guns, loading, error, pagination, refetch }.
-// When the API is unreachable the `error` string will be set and `guns`
-// will remain an empty array so the UI can show a proper error state.
+// Concept: re-opening the catalog within the TTL reuses the cached page
+// instead of hitting the API again (no duplicate request, instant render).
+// `refetch()` bypasses/clears the cache for a fresh read.
 // ---------------------------------------------------------------------------
+const cache = new Map()
+const STALE_TIME = 60_000 // 1 minute
+const GC_TIME = 5 * 60_000 // entries older than this are dropped
+
+const readCache = (key) => {
+  const entry = cache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.timestamp > GC_TIME) {
+    cache.delete(key)
+    return null
+  }
+  return entry
+}
 
 export function useGuns(params = {}) {
+  const key = JSON.stringify(params)
+
   const [guns, setGuns] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [pagination, setPagination] = useState(null)
 
-  // Serialise params so the effect re-runs when they change.
-  const paramKey = JSON.stringify(params)
-
-  const fetchGuns = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const response = await gunService.getGuns(params)
-
-      if (response.success) {
-        setGuns(response.data || [])
-        setPagination(response.pagination || null)
-      } else {
-        setError(response.message || 'Failed to fetch products.')
+  const fetchGuns = useCallback(
+    async (force = false) => {
+      const cached = readCache(key)
+      if (!force && cached && Date.now() - cached.timestamp < STALE_TIME) {
+        setGuns(cached.data.guns)
+        setPagination(cached.data.pagination)
+        setError(null)
+        setLoading(false)
+        return
       }
-    } catch (err) {
-      setError(err.message || 'An error occurred while fetching products.')
-      setGuns([])
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramKey])
+
+      try {
+        setLoading(true)
+        setError(null)
+
+        const response = await gunService.getGuns(JSON.parse(key))
+
+        if (response.success) {
+          const data = {
+            guns: response.data || [],
+            pagination: response.pagination || null,
+          }
+          cache.set(key, { data, timestamp: Date.now() })
+          setGuns(data.guns)
+          setPagination(data.pagination)
+        } else {
+          throw new Error(response.message || 'Failed to fetch products.')
+        }
+      } catch (err) {
+        setError(err.message || 'An error occurred while fetching products.')
+        setGuns([])
+        setPagination(null)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [key],
+  )
 
   useEffect(() => {
     fetchGuns()
   }, [fetchGuns])
 
-  return { guns, loading, error, pagination, refetch: fetchGuns }
-}
+  const refetch = useCallback(() => {
+    cache.delete(key)
+    return fetchGuns(true)
+  }, [key, fetchGuns])
 
-// ---------------------------------------------------------------------------
-// useGunById — fetch a single product by its UUID.
-//
-// Returns { gun, loading, error, refetch }.
-// ---------------------------------------------------------------------------
-
-export function useGunById(id) {
-  const [gun, setGun] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  const fetchGun = useCallback(async () => {
-    if (!id) {
-      setLoading(false)
-      return
-    }
-    try {
-      setLoading(true)
-      setError(null)
-
-      const response = await gunService.getGunById(id)
-
-      if (response.success) {
-        setGun(response.data)
-      } else {
-        setError(response.message || 'Product not found.')
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to load product details.')
-      setGun(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [id])
-
-  useEffect(() => {
-    fetchGun()
-  }, [fetchGun])
-
-  return { gun, loading, error, refetch: fetchGun }
+  return { guns, loading, error, pagination, refetch }
 }

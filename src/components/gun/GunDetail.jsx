@@ -4,6 +4,7 @@ import FavoriteButton from '../common/FavoriteButton'
 import { useReviews, useCreateReview } from '../../hooks/useReviews'
 import { getUserIdentifier } from '../../services/userService'
 import { formatPrice, averageRating } from '../../utils/helpers'
+import { useShare } from '../../utils/share'
 
 /**
  * Full-screen product detail view.
@@ -19,6 +20,7 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
   const category = gun.type || gun.category || '—'
   const caliber = gun.caliber || gun.difficulty || ''
   const price = gun.price ?? gun.cook_time ?? 0
+  const { share, message, isSharing } = useShare(gun)
 
   // Reviews
   const { reviews, loading: reviewsLoading, refetch: refetchReviews } = useReviews(gun.id)
@@ -94,6 +96,19 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
                 Delete
               </button>
             )}
+            <button
+              type="button"
+              className="btn btn--share"
+              onClick={share}
+              aria-label="Share link"
+              title="Share link"
+              disabled={isSharing}
+            >
+              📤
+            </button>
+            <span className="share-feedback" role="status" aria-live="polite">
+              {message}
+            </span>
           </div>
         </div>
       </div>
@@ -170,9 +185,13 @@ export default function GunDetail({ gun, onBack, onEdit, onDelete }) {
             disabled={submitting || !gun.id}
           >
             {submitting ? (
-              <><Loader size={16} className="spin" /> Submitting…</>
+              <>
+                <Loader size={16} className="spin" /> Submitting…
+              </>
             ) : (
-              <><Send size={16} /> Submit Review</>
+              <>
+                <Send size={16} /> Submit Review
+              </>
             )}
           </button>
 

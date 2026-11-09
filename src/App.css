@@ -576,6 +576,31 @@
   padding: 0;
 }
 
+/* ---------------------------------------------------------------------------
+ * Pagination
+ * --------------------------------------------------------------------------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 28px 0 8px;
+}
+
+.pagination__info {
+  font-size: 0.9rem;
+  color: var(--steel);
+  font-variant-numeric: tabular-nums;
+}
+
+.share-feedback {
+  font-size: 0.78rem;
+  color: var(--brass);
+  font-weight: 600;
+  margin: 6px 0 0;
+  text-align: center;
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

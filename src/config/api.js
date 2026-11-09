@@ -10,8 +10,7 @@ const SUPABASE_KEY =
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   ''
 
-const IS_SUPABASE =
-  BASE_URL.includes('supabase.co') || Boolean(SUPABASE_KEY)
+const IS_SUPABASE = BASE_URL.includes('supabase.co') || Boolean(SUPABASE_KEY)
 
 if (!BASE_URL) {
   console.warn(
@@ -19,36 +18,21 @@ if (!BASE_URL) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Axios instance
-// ---------------------------------------------------------------------------
-const apiClient = axios.create({
-  baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 10000, // 10 seconds
-})
+const headers = {
+  'Content-Type': 'application/json',
+}
+if (SUPABASE_KEY) {
+  headers.apikey = SUPABASE_KEY
+  headers.Authorization = `Bearer ${SUPABASE_KEY}`
+}
 
-// ---------------------------------------------------------------------------
-// Request interceptor — attach Supabase headers (apikey & Bearer auth)
-// ---------------------------------------------------------------------------
-apiClient.interceptors.request.use(
-  (config) => {
-    if (IS_SUPABASE && SUPABASE_KEY) {
-      config.headers['apikey'] = SUPABASE_KEY
-      if (!config.headers['Authorization']) {
-        config.headers['Authorization'] = `Bearer ${SUPABASE_KEY}`
-      }
-    }
-    return config
-  },
-  (error) => Promise.reject(error),
-)
+// Normal client — response interceptor unwraps `response.data`.
+const apiClient = axios.create({ baseURL: BASE_URL, headers, timeout: 10000 })
 
-// ---------------------------------------------------------------------------
-// Response interceptor — unwrap response and normalise errors
-// ---------------------------------------------------------------------------
+// Raw client — returns the full Axios response so callers can read headers
+// such as `Content-Range` for pagination totals.
+const apiClientRaw = axios.create({ baseURL: BASE_URL, headers, timeout: 10000 })
+
 apiClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
@@ -79,4 +63,9 @@ apiClient.interceptors.response.use(
   },
 )
 
-export { apiClient, BASE_URL, SUPABASE_KEY, IS_SUPABASE }
+apiClientRaw.interceptors.response.use(
+  (response) => response,
+  (error) => Promise.reject(error),
+)
+
+export { apiClient, apiClientRaw, BASE_URL, SUPABASE_KEY, IS_SUPABASE }

@@ -1,5 +1,6 @@
 import FavoriteButton from '../common/FavoriteButton'
 import { formatPrice, truncate } from '../../utils/helpers'
+import { useShare } from '../../utils/share'
 
 /**
  * Product card used in the catalog grid.
@@ -15,6 +16,7 @@ export default function GunCard({ gun, onSelect, onEdit, onDelete }) {
   const category = gun.type || gun.category || '—'
   const caliber = gun.caliber || gun.difficulty || ''
   const price = gun.price ?? gun.cook_time ?? 0
+  const { share, message, isSharing } = useShare(gun)
 
   return (
     <li className="card">
@@ -74,7 +76,22 @@ export default function GunCard({ gun, onSelect, onEdit, onDelete }) {
             🗑️
           </button>
         )}
+
+        <button
+          type="button"
+          className="card-act-btn card-act-btn--share"
+          onClick={share}
+          aria-label="Share link"
+          title="Share link"
+          disabled={isSharing}
+        >
+          📤
+        </button>
       </div>
+
+      <p className="share-feedback" role="status" aria-live="polite">
+        {message}
+      </p>
     </li>
   )
 }

@@ -1,19 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect, Suspense, lazy } from 'react'
 import Header from './components/Header.jsx'
 import Footer from './components/Footer.jsx'
-import Catalog from './pages/Catalog.jsx'
-import FavoritesPage from './pages/FavoritesPage.jsx'
-import ProfilePage from './pages/ProfilePage.jsx'
-import CreateGunPage from './pages/CreateGunPage.jsx'
-import EditGunPage from './pages/EditGunPage.jsx'
 import GunDetail from './components/gun/GunDetail.jsx'
-import About from './pages/About.jsx'
-import Contact from './pages/Contact.jsx'
 import PWABadge from './components/PWABadge.jsx'
 import ConfirmModal from './components/modals/ConfirmModal.jsx'
 import SplashScreen from './components/common/SplashScreen.jsx'
 import gunService from './services/gunService.js'
 import './App.css'
+
+// Lazy-loaded pages — each becomes its own chunk at build time.
+const LazyCatalog = lazy(() => import('./pages/Catalog.jsx'))
+const LazyCreateGunPage = lazy(() => import('./pages/CreateGunPage.jsx'))
+const LazyEditGunPage = lazy(() => import('./pages/EditGunPage.jsx'))
+const LazyFavoritesPage = lazy(() => import('./pages/FavoritesPage.jsx'))
+const LazyProfilePage = lazy(() => import('./pages/ProfilePage.jsx'))
+const LazyAbout = lazy(() => import('./pages/About.jsx'))
+const LazyContact = lazy(() => import('./pages/Contact.jsx'))
+
+const PageFallback = (
+  <div className="state-box">
+    <p>Loading…</p>
+  </div>
+)
 
 function App() {
   const [showSplash, setShowSplash] = useState(true)
@@ -24,7 +32,23 @@ function App() {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Unified navigation handler
+  // Deep link: /?gun=<id> opens that product's detail view.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('gun')
+    if (!id) return
+    gunService
+      .getGunById(id)
+      .then((res) => {
+        if (res?.success && res.data) {
+          setSelectedGun(res.data)
+          setMode('detail')
+        }
+      })
+      .catch(() => {
+        /* invalid/deleted id — stay on the catalog */
+      })
+  }, [])
+
   const handleNavigate = (target, payload) => {
     if (target === 'Create') {
       setMode('create')
@@ -38,7 +62,6 @@ function App() {
       setMode('detail')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
-      // Tab change
       setTab(target)
       setMode('list')
       setSelectedGun(null)
@@ -51,13 +74,14 @@ function App() {
     setMode('list')
     setSelectedGun(null)
     setEditingGun(null)
+    if (window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
   }
 
   return (
     <div className="shell">
-      {showSplash && (
-        <SplashScreen onFinish={() => setShowSplash(false)} />
-      )}
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
 
       <Header
         tab={mode === 'list' ? tab : ''}
@@ -66,62 +90,66 @@ function App() {
       />
 
       <main className="main">
-        {/* Sub-page views */}
-        {mode === 'create' && (
-          <CreateGunPage
-            onBack={handleBackToList}
-            onSuccess={() => {
-              handleBackToList()
-              setTab('Catalog')
-            }}
-          />
-        )}
+        <Suspense fallback={PageFallback}>
+          {/* Sub-page views */}
+          {mode === 'create' && (
+            <LazyCreateGunPage
+              onBack={handleBackToList}
+              onSuccess={() => {
+                handleBackToList()
+                setTab('Catalog')
+              }}
+            />
+          )}
 
-        {mode === 'edit' && (
-          <EditGunPage
-            gun={editingGun}
-            gunId={editingGun?.id}
-            onBack={handleBackToList}
-            onSuccess={() => {
-              handleBackToList()
-              setTab('Catalog')
-            }}
-          />
-        )}
+          {mode === 'edit' && (
+            <LazyEditGunPage
+              gun={editingGun}
+              gunId={editingGun?.id}
+              onBack={handleBackToList}
+              onSuccess={() => {
+                handleBackToList()
+                setTab('Catalog')
+              }}
+            />
+          )}
 
-        {mode === 'detail' && selectedGun && (
-          <GunDetail
-            gun={selectedGun}
-            onBack={handleBackToList}
-            onEdit={(g) => handleNavigate('Edit', g)}
-            onDelete={(g) => setDeleteTarget(g)}
-          />
-        )}
+          {mode === 'detail' && selectedGun && (
+            <GunDetail
+              gun={selectedGun}
+              onBack={handleBackToList}
+              onEdit={(g) => handleNavigate('Edit', g)}
+              onDelete={(g) => setDeleteTarget(g)}
+            />
+          )}
 
-        {/* Top-level Tabs */}
-        {mode === 'list' && (
-          <>
-            {tab === 'Catalog' && (
-              <Catalog
-                onNavigate={(destination, payload) => handleNavigate(destination, payload)}
-              />
-            )}
-            {tab === 'Favorites' && (
-              <FavoritesPage
-                onSelectGun={(g) => handleNavigate('Detail', g)}
-                onNavigateCatalog={() => setTab('Catalog')}
-              />
-            )}
-            {tab === 'Profile' && (
-              <ProfilePage onReplaySplash={() => setShowSplash(true)} />
-            )}
-            {tab === 'About' && <About />}
-            {tab === 'Contact' && <Contact />}
-          </>
-        )}
+          {/* Top-level tabs */}
+          {mode === 'list' && (
+            <>
+              {tab === 'Catalog' && (
+                <LazyCatalog
+                  onNavigate={(destination, payload) =>
+                    handleNavigate(destination, payload)
+                  }
+                />
+              )}
+              {tab === 'Favorites' && (
+                <LazyFavoritesPage
+                  onSelectGun={(g) => handleNavigate('Detail', g)}
+                  onNavigateCatalog={() => setTab('Catalog')}
+                />
+              )}
+              {tab === 'Profile' && (
+                <LazyProfilePage onReplaySplash={() => setShowSplash(true)} />
+              )}
+              {tab === 'About' && <LazyAbout />}
+              {tab === 'Contact' && <LazyContact />}
+            </>
+          )}
+        </Suspense>
       </main>
 
-      {/* Global Delete Confirmation */}
+      {/* Global delete confirmation */}
       <ConfirmModal
         open={Boolean(deleteTarget)}
         title="Delete Hardware Record"
