@@ -22,6 +22,9 @@ const readCache = (key) => {
   return entry
 }
 
+// Call after create/edit/delete so the catalog does not serve stale pages.
+export const clearGunsCache = () => cache.clear()
+
 export function useGuns(params = {}) {
   const key = JSON.stringify(params)
 

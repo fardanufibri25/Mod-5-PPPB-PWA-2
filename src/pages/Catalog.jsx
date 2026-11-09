@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { RefreshCw, Plus, Loader, AlertCircle, PackageOpen } from 'lucide-react'
-import { useGuns } from '../hooks/useGuns'
+import { useGuns, clearGunsCache } from '../hooks/useGuns'
 import GUNS_LOCAL from '../data/guns'
 import GunCard from '../components/gun/GunCard'
 import GunDetail from '../components/gun/GunDetail'
@@ -108,6 +108,7 @@ export default function Catalog({ onNavigate }) {
       setDeleting(true)
       setDeleteError('')
       await gunService.deleteGun(deleteTarget.id)
+      clearGunsCache()
       setDeleteTarget(null)
       refetch()
     } catch (err) {

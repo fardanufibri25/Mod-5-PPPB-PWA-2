@@ -6,6 +6,7 @@ import PWABadge from './components/PWABadge.jsx'
 import ConfirmModal from './components/modals/ConfirmModal.jsx'
 import SplashScreen from './components/common/SplashScreen.jsx'
 import gunService from './services/gunService.js'
+import { clearGunsCache } from './hooks/useGuns.js'
 import './App.css'
 
 // Lazy-loaded pages — each becomes its own chunk at build time.
@@ -96,6 +97,7 @@ function App() {
             <LazyCreateGunPage
               onBack={handleBackToList}
               onSuccess={() => {
+                clearGunsCache()
                 handleBackToList()
                 setTab('Catalog')
               }}
@@ -108,6 +110,7 @@ function App() {
               gunId={editingGun?.id}
               onBack={handleBackToList}
               onSuccess={() => {
+                clearGunsCache()
                 handleBackToList()
                 setTab('Catalog')
               }}
@@ -162,6 +165,7 @@ function App() {
           try {
             setDeleting(true)
             await gunService.deleteGun(deleteTarget.id)
+            clearGunsCache()
             setDeleteTarget(null)
             handleBackToList()
             setTab('Catalog')

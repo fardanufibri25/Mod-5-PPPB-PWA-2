@@ -259,6 +259,8 @@ export default function CreateGunPage({ onBack, onSuccess }) {
     // Prepare payload compliant with backend /api/v1/recipes schema
     const payload = {
       name: formData.name.trim(),
+      type: formData.type || 'Pistol',
+      caliber: formData.caliber || '9mm',
       category: formData.category || 'makanan',
       description: formData.description.trim() || `${formData.type} caliber ${formData.caliber}.`,
       image_url: uploadedImageUrl || '/guns/pistol.svg',
